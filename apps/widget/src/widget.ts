@@ -1,5 +1,6 @@
 import { renderMarkdown } from '@debugbuddy/markdown';
 import { ChatError, describeError, sendChat } from './api';
+import { buildContextBlock, ignoreRequestsTo, onCaptureChange } from './capture';
 import { copyText, downloadMarkdown, printReport } from './reportActions';
 import { clearState, loadState, saveState, type StoredMessage } from './storage';
 import { styles } from './styles';
@@ -27,6 +28,7 @@ const ICONS = {
   copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h8"/></svg>',
   download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7 10.5l5 5 5-5M5 20h14"/></svg>',
   print: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 9V4h10v5M7 17H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2"/><path d="M7 14h10v6H7z"/></svg>',
+  chevron: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>',
   retry: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>',
 };
 
@@ -56,11 +58,18 @@ export class DebugBuddyWidget {
   private readonly input: HTMLTextAreaElement;
   private readonly sendButton: HTMLButtonElement;
   private readonly counter: HTMLSpanElement;
+  private readonly context: HTMLDivElement;
+  private readonly contextLabel: HTMLSpanElement;
+  private readonly contextToggle: HTMLButtonElement;
+  private readonly contextDecline: HTMLButtonElement;
+  private readonly contextPreview: HTMLPreElement;
 
   private sessionId: string | null;
   private messages: StoredMessage[];
   private pending = false;
   private open = false;
+  /** Whether to attach technical context to this session's first message. Reset per session. */
+  private attachContext = true;
 
   constructor(
     private readonly host: HTMLElement,
@@ -102,6 +111,35 @@ export class DebugBuddyWidget {
     this.thread.setAttribute('aria-live', 'polite');
 
     const composer = el('form', 'composer');
+
+    // Technical context chip: shown before the first message of a session.
+    this.context = el('div', 'context');
+    this.contextToggle = el('button', 'context-toggle');
+    this.contextToggle.type = 'button';
+    this.contextToggle.setAttribute('aria-expanded', 'false');
+    this.contextToggle.innerHTML = ICONS.chevron;
+    this.contextLabel = el('span', undefined, 'Technical details will be attached');
+    this.contextToggle.appendChild(this.contextLabel);
+    this.contextDecline = el('button', 'context-decline', "Don't attach");
+    this.contextDecline.type = 'button';
+    this.contextPreview = el('pre', 'context-preview');
+    this.contextPreview.id = 'debugbuddy-context-preview';
+    this.contextPreview.hidden = true;
+    this.contextToggle.setAttribute('aria-controls', this.contextPreview.id);
+    const contextRow = el('div', 'context-row');
+    contextRow.append(this.contextToggle, this.contextDecline);
+    this.context.append(contextRow, this.contextPreview);
+    this.contextToggle.addEventListener('click', () => {
+      const expanded = this.contextToggle.getAttribute('aria-expanded') !== 'true';
+      this.contextToggle.setAttribute('aria-expanded', String(expanded));
+      this.syncContext();
+    });
+    this.contextDecline.addEventListener('click', () => {
+      this.attachContext = !this.attachContext;
+      this.syncContext();
+    });
+    ignoreRequestsTo(`${config.apiUrl}/api/chat`);
+    onCaptureChange(() => this.syncContext());
     const field = el('div', 'field');
     this.input = el('textarea');
     this.input.rows = 1;
@@ -120,7 +158,7 @@ export class DebugBuddyWidget {
     keys.append(el('kbd', undefined, 'Enter'), document.createTextNode(' to send · '), el('kbd', undefined, 'Shift'), document.createTextNode(' + '), el('kbd', undefined, 'Enter'), document.createTextNode(' for a new line'));
     this.counter = el('span');
     hint.append(keys, this.counter);
-    composer.append(field, hint);
+    composer.append(this.context, field, hint);
 
     composer.addEventListener('submit', (e) => {
       e.preventDefault();
@@ -153,6 +191,7 @@ export class DebugBuddyWidget {
     });
 
     this.renderInitialThread();
+    this.syncContext();
   }
 
   // ---------- open / close ----------
@@ -164,6 +203,7 @@ export class DebugBuddyWidget {
     this.launcher.setAttribute('aria-label', open ? 'Close bug report chat' : 'Report a bug');
     this.panel.setAttribute('aria-hidden', String(!open));
     if (open) {
+      this.syncContext();
       requestAnimationFrame(() => {
         this.scrollToEnd();
         this.input.focus({ preventScroll: true });
@@ -343,6 +383,20 @@ export class DebugBuddyWidget {
     const length = this.input.value.length;
     this.counter.textContent = length > MAX_LENGTH * 0.8 ? `${length}/${MAX_LENGTH}` : '';
     this.sendButton.disabled = this.pending || !this.input.value.trim();
+    this.syncContext();
+  }
+
+  /** Context is offered only before a session's first message, and only if something was captured. */
+  private syncContext() {
+    const block = this.sessionId === null && !this.pending ? buildContextBlock(MAX_LENGTH - this.input.value.trim().length) : '';
+    this.context.hidden = !block;
+    if (!block) return;
+    const expanded = this.contextToggle.getAttribute('aria-expanded') === 'true';
+    this.context.dataset.declined = String(!this.attachContext);
+    this.contextLabel.textContent = this.attachContext ? 'Technical details will be attached' : "Technical details won't be attached";
+    this.contextDecline.textContent = this.attachContext ? "Don't attach" : 'Attach';
+    this.contextPreview.hidden = !expanded;
+    if (expanded) this.contextPreview.textContent = block.replace(/^\n+/, '');
   }
 
   private submit() {
@@ -361,7 +415,11 @@ export class DebugBuddyWidget {
     const hideTyping = this.showTyping();
 
     try {
-      const reply = await sendChat(this.config.apiUrl, this.config.apiKey, text, this.sessionId);
+      // First message of a session: append the captured context (unless declined). Only
+      // the request carries it; the thread and storage keep what the person typed.
+      // The API caps a message at MAX_LENGTH, so the block only gets the room left over.
+      const context = this.sessionId === null && this.attachContext ? buildContextBlock(MAX_LENGTH - text.length) : '';
+      const reply = await sendChat(this.config.apiUrl, this.config.apiKey, text + context, this.sessionId);
       hideTyping();
       this.sessionId = reply.sessionId;
       this.appendAssistant(reply.content, reply.type);
@@ -369,6 +427,7 @@ export class DebugBuddyWidget {
         // Conversation done: forget the session so the next message starts fresh.
         this.sessionId = null;
         this.messages = [];
+        this.attachContext = true;
         clearState(this.config.apiKey);
       }
     } catch (err) {

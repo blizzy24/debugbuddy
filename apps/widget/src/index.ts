@@ -1,3 +1,5 @@
+// Must stay the first import: installs error/console/network capture before anything else runs.
+import './capture';
 import { DebugBuddyWidget } from './widget';
 
 /**

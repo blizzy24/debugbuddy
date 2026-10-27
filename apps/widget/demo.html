@@ -34,6 +34,15 @@
         <p><button type="submit">Load widget</button></p>
       </form>
 
+      <p>Simulate problems (they show up in the widget's "Technical details" preview):</p>
+      <p>
+        <button type="button" onclick="setTimeout(function () { null.total; })">Throw an error</button>
+        <button type="button" onclick="Promise.reject(new Error('Checkout promise rejected'))">Reject a promise</button>
+        <button type="button" onclick="console.error('Cart failed to load', { cartId: 42 })">console.error</button>
+        <button type="button" onclick="fetch('/api/cart?session_id=abc123', { headers: { accept: 'application/json' } }).catch(function () {})">Failed request</button>
+        <button type="button" onclick="fetch('http://127.0.0.1:1/unreachable').catch(function () {})">Network failure</button>
+      </p>
+
       <p>The page then injects exactly the tag a customer would paste:</p>
       <pre id="snippet"></pre>
     </main>
