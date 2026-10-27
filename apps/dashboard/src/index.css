@@ -1,0 +1,60 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+  body { @apply bg-canvas text-ink font-sans; font-feature-settings: 'cv11', 'ss01'; }
+  ::selection { @apply bg-accent-soft text-ink; }
+}
+
+@layer components {
+  .card { @apply rounded-xl border border-stone-200/80 bg-white shadow-card; }
+  .label { @apply mb-1.5 block text-[13px] font-medium text-ink-2; }
+  .input {
+    @apply block w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-ink
+      placeholder:text-stone-400 shadow-sm transition
+      focus:border-accent focus:outline-none focus:ring-4 focus:ring-accent-soft;
+  }
+  .eyebrow { @apply text-[11px] font-semibold uppercase tracking-[0.08em] text-stone-500; }
+}
+
+/* Rendered pipeline markdown (from @debugbuddy/markdown) */
+.report-md { @apply text-[15px] leading-7 text-ink-2; }
+.report-md > :first-child { margin-top: 0; }
+.report-md .md-h1 { @apply mb-4 mt-2 text-2xl font-semibold tracking-tight text-ink; }
+.report-md .md-h2 {
+  @apply mb-3 mt-9 border-t border-stone-100 pt-6 text-[12px] font-semibold uppercase tracking-[0.08em] text-stone-500;
+}
+.report-md .md-h1 + .md-h2 { @apply mt-6 border-t-0 pt-0; }
+.report-md .md-p { @apply mb-3; }
+.report-md .md-ul { @apply mb-3 list-disc space-y-1.5 pl-5 marker:text-stone-400; }
+.report-md .md-ol { @apply mb-3 list-decimal space-y-1.5 pl-5 marker:text-stone-400 marker:tabular-nums; }
+.report-md .md-checklist { @apply mb-3 space-y-2; }
+.report-md .md-check { @apply flex items-start gap-3; }
+.report-md .md-box { @apply mt-[5px] h-4 w-4 flex-none rounded border-[1.5px] border-stone-300 bg-white; }
+.report-md .md-box-checked { @apply border-accent bg-accent; }
+.report-md .md-hr { @apply my-8 border-stone-200; }
+.report-md strong { @apply font-semibold text-ink; }
+.report-md em { @apply italic; }
+.report-md .md-sr { @apply sr-only; }
+
+/* Print: only the report article, black on white. */
+@media print {
+  @page { margin: 18mm 16mm; }
+  html, body { background: #fff !important; }
+  body * { visibility: hidden; }
+  #printable-report, #printable-report * { visibility: visible; }
+  #printable-report {
+    position: absolute;
+    inset: 0 0 auto 0;
+    border: 0 !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+  }
+  #printable-report * { color: #000 !important; background: transparent !important; box-shadow: none !important; }
+  #printable-report .md-box { border-color: #000 !important; }
+  #printable-report .md-box.md-box-checked { background: #000 !important; }
+  #printable-report .md-h2 { break-after: avoid; border-color: #000 !important; }
+  #printable-report li { break-inside: avoid; }
+}

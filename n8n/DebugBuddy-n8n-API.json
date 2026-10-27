@@ -1,0 +1,595 @@
+{
+  "name": "DebugBuddy API",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "debugbuddy",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "id": "webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.2,
+      "position": [
+        -220,
+        300
+      ],
+      "webhookId": "debugbuddy-api"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// DebugBuddy API — read what the backend sent.\n// n8n holds NO state. The backend owns sessions and sends the whole story.\nconst b = $json.body || {};\n\nconst fullText = (b.full_report_text || '').trim();\nif (!fullText) {\n  throw new Error('full_report_text is required');\n}\n\nreturn [{ json: {\n  session_id: b.session_id || null,\n  full_report_text: fullText,\n  iteration: Number(b.iteration) || 1,\n  max_iterations: Number(b.max_iterations) || 3\n} }];"
+      },
+      "id": "parse-input",
+      "name": "Parse Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Analyze the following software bug report.\n\n{{ $json.full_report_text }}",
+        "messages": {
+          "messageValues": [
+            {
+              "type": "SystemMessagePromptTemplate",
+              "message": "You are DebugBuddy's Engineering Intake Agent.\nYour ONLY responsibility is to transform an unstructured software bug report into structured engineering information.\nYou are NOT a debugging assistant.\nYour goal is to prepare the issue for engineering investigation—not to solve it.\n━━━━━━━━━━━━━━━━━━━━━━\nRULES\n━━━━━━━━━━━━━━━━━━━━━━\nDO NOT:\n- Diagnose the issue.\n- Suggest fixes.\n- Speculate about root causes.\n- Invent missing information.\n- Infer information that is not explicitly stated.\n- Fill missing fields with assumptions.\n- Include fields with null or empty values.\nExtract only information that is explicitly stated or directly observable from the report.\nDo not infer missing facts.\nIf information is missing, simply omit that field.\n━━━━━━━━━━━━━━━━━━━━━━\nRESPONSIBILITIES\n━━━━━━━━━━━━━━━━━━━━━━\n1. Generate a concise one-sentence summary.\n2. Identify the most appropriate bug category.\n3. Estimate severity conservatively.\n4. Determine whether the report is sufficiently detailed for engineering investigation.\nSet requires_clarification to:\n- true → if important contextual information is obviously missing and follow-up questions would likely improve the investigation.\n- false → if the report already contains enough information for an engineer to begin investigating.\n━━━━━━━━━━━━━━━━━━━━━━\nVALID CATEGORIES\n━━━━━━━━━━━━━━━━━━━━━━\n- authentication\n- api\n- backend\n- frontend\n- database\n- deployment\n- performance\n- security\n- ui\n- other\nCategory MUST be exactly one of the listed values.\nNever invent new categories.\n━━━━━━━━━━━━━━━━━━━━━━\nSEVERITY GUIDELINES\n━━━━━━━━━━━━━━━━━━━━━━\nSeverity Guidelines\nlow\n- Cosmetic issue.\n- Minor UI problem.\n- Easy workaround.\nmedium\n- Feature partially affected.\n- Limited business impact.\nhigh\n- Major functionality is affected.\n- No obvious workaround.\n- Users cannot complete an important workflow.\ncritical\nUse ONLY when the report explicitly indicates one or more of the following:\n- Complete production outage.\n- Security incident.\n- Data loss or corruption.\n- Business-critical service unavailable.\n- Severe impact affecting nearly all users.\nIf the report does not explicitly support Critical, choose High instead.\nSeverity MUST be exactly one of:\nlow\nmedium\nhigh\ncritical\n━━━━━━━━━━━━━━━━━━━━━━\nKNOWN INFORMATION\n━━━━━━━━━━━━━━━━━━━━━━\nExtract only verified information.\nPossible keys include:\n- actual_behavior\n- expected_behavior\n- environment\n- browser\n- device\n- operating_system\n- error_message\n- error_code\n- endpoint\n- http_method\n- request_payload\n- response\n- deployment_context\n- authentication_method\n- frequency\n- affected_users\n- reproduction_steps\n- attachments_present\nDo NOT include keys that are not present in the report.\n━━━━━━━━━━━━━━━━━━━━━━\nOUTPUT\n━━━━━━━━━━━━━━━━━━━━━━\nYour response must conform exactly to the provided output schema.\nPopulate only fields supported by the bug report.\nDo not invent fields or values.\nAlways include the required fields defined by the schema."
+            }
+          ]
+        },
+        "hasOutputParser": true
+      },
+      "id": "intake-agent",
+      "name": "Intake Agent",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"summary\": {\n      \"type\": \"string\"\n    },\n    \"category\": {\n      \"type\": \"string\",\n      \"enum\": [\n        \"authentication\",\n        \"api\",\n        \"backend\",\n        \"frontend\",\n        \"database\",\n        \"deployment\",\n        \"performance\",\n        \"security\",\n        \"ui\",\n        \"other\"\n      ]\n    },\n    \"severity\": {\n      \"type\": \"string\",\n      \"enum\": [\n        \"low\",\n        \"medium\",\n        \"high\",\n        \"critical\"\n      ]\n    },\n    \"known_information\": {\n      \"type\": \"object\",\n      \"additionalProperties\": true\n    },\n    \"requires_clarification\": {\n      \"type\": \"boolean\"\n    }\n  },\n  \"required\": [\n    \"summary\",\n    \"category\",\n    \"severity\",\n    \"requires_clarification\"\n  ]\n}"
+      },
+      "id": "intake-schema",
+      "name": "Intake Schema",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        280,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// DebugBuddy API — Context Builder\nconst intake = $json.output || {};\nconst src = $('Parse Input').first().json;\nreturn [{ json: { ...src, intake: {\n  summary: intake.summary,\n  category: intake.category,\n  severity: intake.severity,\n  known_information: intake.known_information || {},\n  requires_clarification: intake.requires_clarification\n} } }];"
+      },
+      "id": "context-builder",
+      "name": "Context Builder",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Investigation Context\n\nReport so far:\n{{ $json.full_report_text }}\n\nIntake:\n{{ JSON.stringify($json.intake) }}\n\nIteration: {{ $json.iteration }}",
+        "messages": {
+          "messageValues": [
+            {
+              "type": "SystemMessagePromptTemplate",
+              "message": "You are the Investigation Planner for DebugBuddy, an engineering intake assistant.\nYour ONLY job is to evaluate whether the available information is sufficient to begin a structured engineering investigation, and to identify exactly what is missing or problematic.\nYou do NOT diagnose bugs.\nYou do NOT suggest fixes.\nYou do NOT generate hypotheses.\nYou do NOT invent or infer information that was not explicitly stated.\n---\nSTEP 1 — CONTRADICTION CHECK\nBefore evaluating readiness, scan the report for contradictory facts.\nA contradiction exists when two statements in the same report cannot both be true simultaneously.\nExamples of contradictions:\n- \"The application crashes\" AND \"The application does not crash\"\n- \"Only one user is affected\" AND \"Every user is affected\"\n- \"Only production is affected\" AND \"Only staging is affected\"\n- \"The error started today\" AND \"The error has been happening for two weeks\"\nIf you detect a contradiction:\n- Set readiness_score to 0.\n- Add a missing_information entry with:\n- field: \"contradiction\"\n- reason: Quote the exact conflicting statements. Example: \"The report states 'only one user is affected' but also states 'every user is affected'. These cannot both be true. Please clarify.\"\n- importance: \"high\"\n- Do not add any other missing_information entries.\n- Stop evaluation. Return immediately.\n---\nSTEP 2 — MULTIPLE INDEPENDENT ISSUE CHECK\nIf the report describes multiple independent problems that would require separate investigations, do not merge them.\nExamples:\n- Login failure AND payment failure AND dashboard slowness\n- API returning 500 AND database connection errors AND deployment failure\nIf you detect multiple independent issues:\n- Set readiness_score to 0.\n- Add a single missing_information entry with:\n- field: \"multiple_issues_detected\"\n- reason: List the distinct issues identified. Example: \"The report describes three separate issues: (1) login failure, (2) payment failure, (3) dashboard slowness. Please specify which single issue you would like to investigate first.\"\n- importance: \"high\"\n- Do not add any other missing_information entries.\n- Stop evaluation. Return immediately.\n---\nSTEP 2.5 — SECURITY INCIDENT OVERRIDE\nIf the report describes an active security incident, apply these rules:\nAn active security incident is identified by ANY of:\n- Confirmed unauthorized access to systems or data\n- Confirmed or suspected data exfiltration\n- Active breach in progress\n- Confirmed data loss or corruption\n- Exposure of credentials, PII, or sensitive data\nIf an active security incident is detected:\n- Set readiness_score to 85 minimum, regardless of missing information.\n- Set severity to \"critical\" in your evaluation notes.\n- missing_information entries are still allowed but must not reduce the score below 85.\n- The investigation must proceed immediately. Missing attack vector details do not block investigation — they are listed as gaps for the engineer to investigate.\nRationale: An active breach cannot wait for clarification. Engineers must begin containment immediately with whatever information is available.\n---\nSTEP 3 — READINESS EVALUATION\nIf there are no contradictions and no multiple independent issues, evaluate readiness.\nEvaluate only what is explicitly present in the report.\nDo not assume any information that was not stated.\nDo not infer from context.\nEvaluate the following dimensions. Each dimension is either present, partially present, or absent.\n1. ACTUAL BEHAVIOR\nWhat is actually happening? Is a specific, concrete behavior described?\n- Present: specific behavior described (e.g., \"returns 401\", \"crashes on submit\", \"page loads blank\")\n- Partial: vague description (e.g., \"something is wrong\", \"it doesn't work\")\n- Absent: no description of what is happening\n2. EXPECTED BEHAVIOR\nWhat should happen instead? Is the expected behavior clear?\n- Present: clearly stated\n- Partial: implied but not explicit\n- Absent: not mentioned\n3. ENVIRONMENT\nWhere is this happening? (production, staging, local, specific region, cloud provider)\n- Present: specific environment stated\n- Partial: implied (e.g., \"our users\" implies production)\n- Absent: no environment information\n4. REPRODUCTION STEPS\nCan an engineer reproduce this issue following the report?\n- Present: step-by-step reproduction path exists\n- Partial: some steps exist but incomplete\n- Absent: no reproduction information\n5. ERROR SIGNALS\nAre there error messages, codes, stack traces, or logs?\n- Present: specific error message, code, or log excerpt provided\n- Partial: error mentioned but not quoted\n- Absent: no error information\n6. SCOPE AND IMPACT\nHow many users are affected? Is this intermittent or consistent?\n- Present: specific scope stated (e.g., \"all users\", \"only user X\", \"50% of requests\")\n- Partial: vague (e.g., \"some users\")\n- Absent: no scope information\n7. TIMELINE\nWhen did this start? Was there a recent change, deployment, or event?\n- Present: specific timeline or triggering event stated\n- Partial: approximate timeframe given\n- Absent: no timeline information\n---\nREADINESS SCORE GUIDELINES\nScore 0–20:\nAlmost nothing is known. Only a vague problem description exists. No environment, no error, no reproduction, no scope.\nScore 21–40:\nSome basic facts exist (e.g., a symptom and an environment) but critical investigation context is missing.\nScore 41–59:\nMeaningful information exists but at least one high-importance dimension is absent or critically vague.\nScore 60–79:\nMost important dimensions are present. An engineer could begin investigation with some confidence, though gaps remain.\nScore 80–100:\nStrong, specific, consistent information across most or all dimensions. An engineer can begin investigation immediately.\nThe threshold for proceeding to a report is 60.\n---\nMISSING INFORMATION GUIDELINES\nFor each dimension that is absent or critically incomplete, add one entry to missing_information.\nEach entry must:\n- Use a specific, descriptive field name (not generic names like \"more_details\")\n- Explain WHY that information is needed for this specific investigation\n- Assign importance: \"high\", \"medium\", or \"low\"\nPrefer specific entries such as:\n{\n\"field\": \"server_logs_at_time_of_failure\",\n\"reason\": \"No server logs were provided. Logs from the time of the 401 error are needed to determine whether the failure is occurring at the authentication layer, the middleware, or the token validation step.\",\n\"importance\": \"high\"\n}\nAvoid vague entries such as:\n{\n\"field\": \"more_information\",\n\"reason\": \"We need more details.\",\n\"importance\": \"high\"\n}\nPrioritize high-importance gaps first.\nDo not list more than 6 missing_information entries. Focus on what matters most.\n---\nOUTPUT RULES\nYou must return only valid JSON matching this schema:\n{\n\"readiness_score\": <number 0–100>,\n\"confidence\": <number 0–100, how confident you are in your readiness_score>,\n\"missing_information\": [\n{\n\"field\": \"<specific field name>\",\n\"reason\": \"<specific reason this field is needed for this investigation>\",\n\"importance\": \"<high|medium|low>\"\n}\n]\n}\nDo NOT include a \"ready\" field. Readiness is determined by downstream logic.\nDo NOT include explanations, preamble, or commentary outside the JSON.\nDo NOT include markdown formatting or code blocks.\nReturn only the raw JSON object."
+            }
+          ]
+        },
+        "hasOutputParser": true
+      },
+      "id": "investigation-planner",
+      "name": "Investigation Planner",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"readiness_score\": {\n      \"type\": \"number\"\n    },\n    \"confidence\": {\n      \"type\": \"number\"\n    },\n    \"missing_information\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"field\": {\n            \"type\": \"string\"\n          },\n          \"reason\": {\n            \"type\": \"string\"\n          },\n          \"importance\": {\n            \"type\": \"string\",\n            \"enum\": [\n              \"high\",\n              \"medium\",\n              \"low\"\n            ]\n          }\n        },\n        \"required\": [\n          \"field\",\n          \"reason\",\n          \"importance\"\n        ]\n      }\n    }\n  },\n  \"required\": [\n    \"readiness_score\",\n    \"confidence\",\n    \"missing_information\"\n  ]\n}"
+      },
+      "id": "planner-schema",
+      "name": "Planner Schema",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        740,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// DebugBuddy API — Readiness Evaluator\nconst planner = $json.output || {};\nconst ctx = $('Context Builder').first().json;\n\nconst score = typeof planner.readiness_score === 'number' ? planner.readiness_score : 0;\nlet ready = score >= 60;\nlet forced = false;\nif (!ready && ctx.iteration >= ctx.max_iterations) { ready = true; forced = true; }\n\nreturn [{ json: { ...ctx, ready, forced,\n  readiness_score: score,\n  confidence: typeof planner.confidence === 'number' ? planner.confidence : 0,\n  missing_information: planner.missing_information || [] } }];"
+      },
+      "id": "readiness-evaluator",
+      "name": "Readiness Evaluator",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        920,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ready",
+              "leftValue": "={{ $json.ready }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "ready?",
+      "name": "Ready?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1120,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Investigation Context\n\nReport so far:\n{{ $json.full_report_text }}\n\nIntake:\n{{ JSON.stringify($json.intake) }}\n\nInvestigation Planner\nReadiness Score: {{ $json.readiness_score }}\nConfidence: {{ $json.confidence }}\nMissing Information: {{ JSON.stringify($json.missing_information) }}",
+        "messages": {
+          "messageValues": [
+            {
+              "type": "SystemMessagePromptTemplate",
+              "message": "You are DebugBuddy's Engineering Report Agent.\nYour job is to transform the investigation context into a concise, structured engineering report.\nDebugBuddy does NOT debug bugs.\nDebugBuddy makes bugs debuggable.\n--------------------------------------------------\nYou are NOT allowed to:\n- Provide implementation code.\n- Suggest fixes.\n- Claim certainty without evidence.\n- Invent facts.\n- State hypotheses as facts.\n--------------------------------------------------\nYou will receive:\n- Investigation Context\n- Investigation Planner Output\nGenerate a report that helps an engineer begin investigating immediately.\n--------------------------------------------------\nPopulate every field carefully.\nExecutive Summary\nSummarize the issue in 1-2 sentences.\nObserved Facts\nInclude ONLY verified facts from the investigation context.\nWorking Hypothesis\nProvide one cautious hypothesis.\nClearly distinguish it from facts.\nLikely Subsystem\nIdentify the engineering subsystem most likely involved.\nRecommended First Checks\nReturn 3-5 immediate investigation actions.\nInvestigation Checklist\nReturn a prioritized checklist.\nMissing Information\nList any remaining investigation gaps.\nNext Best Question\nReturn the single question that would most improve the investigation if answered.\n--------------------------------------------------\nNever fabricate technical evidence.\nReturn only valid JSON matching the schema."
+            }
+          ]
+        },
+        "hasOutputParser": true
+      },
+      "id": "engineering-report-agent",
+      "name": "Engineering Report Agent",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        1340,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"executive_summary\": {\n      \"type\": \"string\"\n    },\n    \"readiness_score\": {\n      \"type\": \"number\"\n    },\n    \"confidence\": {\n      \"type\": \"number\"\n    },\n    \"severity\": {\n      \"type\": \"string\"\n    },\n    \"likely_subsystem\": {\n      \"type\": \"string\"\n    },\n    \"observed_facts\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"string\"\n      }\n    },\n    \"working_hypothesis\": {\n      \"type\": \"string\"\n    },\n    \"recommended_first_checks\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"string\"\n      }\n    },\n    \"investigation_checklist\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"string\"\n      }\n    },\n    \"missing_information\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"string\"\n      }\n    },\n    \"next_best_question\": {\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"executive_summary\",\n    \"observed_facts\",\n    \"working_hypothesis\",\n    \"recommended_first_checks\",\n    \"investigation_checklist\",\n    \"next_best_question\"\n  ]\n}"
+      },
+      "id": "report-schema",
+      "name": "Report Schema",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        1400,
+        -40
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Engineering Report:\nExecutive Summary:\n{{ $json.output.executive_summary }}\nSeverity:\n{{ $json.output.severity }}\nLikely Subsystem:\n{{ $json.output.likely_subsystem }}\nObserved Facts:\n{{ JSON.stringify($json.output.observed_facts) }}\nWorking Hypothesis:\n{{ $json.output.working_hypothesis }}\nRecommended First Checks:\n{{ JSON.stringify($json.output.recommended_first_checks) }}\nInvestigation Checklist:\n{{ JSON.stringify($json.output.investigation_checklist) }}\nMissing Information:\n{{ JSON.stringify($json.output.missing_information) }}\nNext Best Question:\n{{ $json.output.next_best_question }}",
+        "messages": {
+          "messageValues": [
+            {
+              "type": "SystemMessagePromptTemplate",
+              "message": "You are DebugBuddy's Engineering Report Formatter.\nYour ONLY responsibility is to convert a structured engineering report into a readable report.\nDo NOT modify the content.\nDo NOT invent information.\nKeep every section.\nFormat using headings and bullet points.\nThe report should look professional and easy to read.\nReturn ONLY the formatted engineering report.\nDo not return JSON.\nDo not wrap the response in quotes.\nDo not use Markdown code blocks."
+            }
+          ]
+        }
+      },
+      "id": "report-formatter",
+      "name": "Report Formatter",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        1560,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// DebugBuddy API — report response\nconst ev = $('Readiness Evaluator').first().json;\nconst agent = $('Engineering Report Agent').first().json.output || {};\nlet message = $json.text;\nif (ev.forced) {\n  message += '\\n\\n---\\n_Produced after ' + ev.iteration +\n    ' rounds without reaching the readiness threshold (score ' +\n    ev.readiness_score + '/100). Remaining gaps are listed above._';\n}\nreturn [{ json: {\n  status: 'report_ready',\n  session_id: ev.session_id,\n  iteration: ev.iteration,\n  readiness_score: ev.readiness_score,\n  confidence: ev.confidence,\n  forced: ev.forced,\n  intake: ev.intake,\n  report: agent,\n  message\n} }];"
+      },
+      "id": "report-response",
+      "name": "Report Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1780,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Investigation Planner Output\n\nMissing Information:\n{{ JSON.stringify($json.missing_information) }}\n\nReport so far (do not ask about anything already answered here):\n{{ $json.full_report_text }}",
+        "messages": {
+          "messageValues": [
+            {
+              "type": "SystemMessagePromptTemplate",
+              "message": "You are DebugBuddy's Clarification Agent.\nYour ONLY job is to turn the Investigation Planner's missing_information entries\ninto clear, specific questions for the person who reported the bug.\n\nYou do NOT diagnose.\nYou do NOT suggest fixes.\nYou do NOT invent gaps that the Planner did not list.\nYou do NOT ask about anything already present in the report.\n\nRULES\n- Ask at most 4 questions. Fewer is better.\n- Order them by the Planner's importance: all \"high\" first, then \"medium\", then \"low\".\n- One fact per question. Never bundle two asks into one sentence.\n- Write for the person who filed the report, not for an engineer.\n- Make each question answerable in one short sentence.\n- Where it helps, suggest the shape of a good answer, e.g. \"which environment —\n  production, staging, or local?\"\n- Set priority to the importance of the gap it came from.\n- Set reason to the Planner's reason, rephrased for the user.\n- Give each question a short stable id such as \"q1\", \"q2\".\n\nReturn only valid JSON matching the provided schema.\n\nSPECIAL CASE — CONTRADICTION\nIf missing_information contains an entry with field \"contradiction\", the report contains directly conflicting statements that must be resolved before investigation can begin.\nIn this case:\n- Ask exactly ONE question.\n- Quote the specific conflicting statements from the reason field.\n- Do not split into multiple questions.\n- Do not ask about anything else.\nExample output for a contradiction:\n\"Before I can investigate, I need to resolve a conflict in your report. You mentioned that the application crashes, but also that it does not crash. Which of these is accurate?\"\nSPECIAL CASE — MULTIPLE ISSUES\nIf missing_information contains an entry with field \"multiple_issues_detected\":\n- Ask exactly ONE question.\n- List the issues identified from the reason field.\n- Ask which single issue to investigate first.\n- Do not ask about anything else.\nExample output for multiple issues:\n\"Your report describes multiple separate issues: login failure, payment failure, and dashboard slowness. Which of these would you like me to investigate first?\""
+            }
+          ]
+        },
+        "hasOutputParser": true
+      },
+      "id": "clarification-agent",
+      "name": "Clarification Agent",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        1340,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"questions\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"id\": {\n            \"type\": \"string\"\n          },\n          \"question\": {\n            \"type\": \"string\"\n          },\n          \"reason\": {\n            \"type\": \"string\"\n          },\n          \"priority\": {\n            \"type\": \"string\"\n          }\n        },\n        \"required\": [\n          \"id\",\n          \"question\"\n        ]\n      }\n    }\n  },\n  \"required\": [\n    \"questions\"\n  ]\n}"
+      },
+      "id": "clarification-schema",
+      "name": "Clarification Schema",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        1400,
+        660
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Clarification Questions:\n{{ JSON.stringify($json.output.questions) }}",
+        "messages": {
+          "messageValues": [
+            {
+              "type": "SystemMessagePromptTemplate",
+              "message": "You are DebugBuddy's Clarification Formatter.\nYour job is ONLY to convert structured clarification questions into a natural, user-friendly message.\nYou are NOT allowed to:\n- Invent new questions.\n- Modify any question.\n- Remove questions.\n- Add explanations.\nInstructions:\n- Begin with a short sentence explaining that more information is needed.\n- Present each question as a numbered list.\n- Do not include IDs, priorities, or internal fields.\n- End by asking the user to answer the questions in order.\nReturn ONLY the formatted message.\nDo not return JSON.\nDo not wrap the response in quotes.\nDo not use Markdown code blocks.\nFORMATTING RULES\n- If there is only one question, do NOT include \"Please answer these questions in order.\"\n- If there are multiple questions, include \"Please answer these questions in order.\" after the last question.\n- Do not use a generic opener like \"I need a little more information to help you with this issue\" when the question is about a contradiction or a multiple-issues situation.\n- If the first question contains the word \"contradiction\" or \"conflict\", open with: \"There's a conflict in your report that I need to resolve before I can investigate.\"\n- If the first question contains \"multiple\" or \"separate issues\", open with: \"Your report describes multiple separate issues.\""
+            }
+          ]
+        }
+      },
+      "id": "clarification-formatter",
+      "name": "Clarification Formatter",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        1560,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// DebugBuddy API — clarification response\nconst ev = $('Readiness Evaluator').first().json;\nconst agent = $('Clarification Agent').first().json.output || {};\nreturn [{ json: {\n  status: 'needs_clarification',\n  session_id: ev.session_id,\n  iteration: ev.iteration,\n  readiness_score: ev.readiness_score,\n  confidence: ev.confidence,\n  forced: false,\n  intake: ev.intake,\n  missing_information: ev.missing_information,\n  questions: agent.questions || [],\n  message: $json.text\n} }];"
+      },
+      "id": "clarification-response",
+      "name": "Clarification Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1780,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "respond",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        2000,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.5-flash",
+        "options": {
+          "temperature": 0.2,
+          "maxOutputTokens": 4096
+        }
+      },
+      "id": "gemini",
+      "name": "Gemini",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        650,
+        780
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Parse Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Input": {
+      "main": [
+        [
+          {
+            "node": "Intake Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Intake Agent": {
+      "main": [
+        [
+          {
+            "node": "Context Builder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Context Builder": {
+      "main": [
+        [
+          {
+            "node": "Investigation Planner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Investigation Planner": {
+      "main": [
+        [
+          {
+            "node": "Readiness Evaluator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Readiness Evaluator": {
+      "main": [
+        [
+          {
+            "node": "Ready?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ready?": {
+      "main": [
+        [
+          {
+            "node": "Engineering Report Agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Clarification Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Engineering Report Agent": {
+      "main": [
+        [
+          {
+            "node": "Report Formatter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Report Formatter": {
+      "main": [
+        [
+          {
+            "node": "Report Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Report Response": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clarification Agent": {
+      "main": [
+        [
+          {
+            "node": "Clarification Formatter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clarification Formatter": {
+      "main": [
+        [
+          {
+            "node": "Clarification Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clarification Response": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Intake Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          },
+          {
+            "node": "Investigation Planner",
+            "type": "ai_languageModel",
+            "index": 0
+          },
+          {
+            "node": "Engineering Report Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          },
+          {
+            "node": "Report Formatter",
+            "type": "ai_languageModel",
+            "index": 0
+          },
+          {
+            "node": "Clarification Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          },
+          {
+            "node": "Clarification Formatter",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Intake Schema": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Intake Agent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Planner Schema": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Investigation Planner",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Report Schema": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Engineering Report Agent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clarification Schema": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Clarification Agent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {
+    "instanceId": "debugbuddy-api"
+  },
+  "tags": []
+}

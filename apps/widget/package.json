@@ -1,0 +1,17 @@
+{
+  "name": "@debugbuddy/widget",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json && vite build",
+    "typecheck": "tsc -p tsconfig.json",
+    "watch": "vite build --watch",
+    "demo": "vite build && vite --port 5174 --strictPort --open /demo.html"
+  },
+  "devDependencies": {
+    "@debugbuddy/markdown": "*",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.10"
+  }
+}

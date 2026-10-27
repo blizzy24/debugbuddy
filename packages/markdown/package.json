@@ -1,0 +1,29 @@
+{
+  "name": "@debugbuddy/markdown",
+  "private": true,
+  "version": "0.2.0",
+  "description": "Escape-first markdown \u2192 HTML renderer shared by widget and dashboard, plus a separate markdown \u2192 Jira ADF converter.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./src/index.ts",
+        "default": "./src/index.ts"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "test:adf": "tsx test/adf.test.ts"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.3"
+  }
+}

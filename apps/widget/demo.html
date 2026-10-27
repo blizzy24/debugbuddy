@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>DebugBuddy widget demo</title>
+    <style>
+      /* Deliberately loud host styles: none of this should reach the widget (shadow DOM). */
+      * { font-family: Georgia, serif !important; }
+      button { background: hotpink; border: 4px dashed lime; }
+      body { margin: 0; background: #f4f1ea; color: #222; line-height: 1.6; }
+      main { max-width: 640px; margin: 0 auto; padding: 64px 20px; }
+      h1 { font-size: 2.2rem; margin: 0 0 .5rem; }
+      code, pre { font-family: ui-monospace, Menlo, monospace !important; font-size: 13px; }
+      pre { background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 14px; overflow-x: auto; white-space: pre-wrap; word-break: break-all; }
+      .note { background: #fff8e1; border: 1px solid #f0dc9a; border-radius: 8px; padding: 12px 14px; }
+      label { display: block; margin: 1rem 0 .25rem; font-weight: bold; }
+      input { width: 100%; box-sizing: border-box; padding: 8px 10px; font-size: 14px; border: 1px solid #ccc; border-radius: 6px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Acme Storefront</h1>
+      <p>A stand-in customer site for testing the DebugBuddy widget. The host page uses aggressive CSS on
+        purpose (serif everything, hot-pink dashed buttons) — the widget in the corner should be unaffected.</p>
+
+      <div class="note" id="status">Loading…</div>
+
+      <form id="config">
+        <label for="key">Public API key</label>
+        <input id="key" name="key" placeholder="db_live_…" autocomplete="off" spellcheck="false" />
+        <label for="api">API URL</label>
+        <input id="api" name="api" placeholder="http://localhost:8787" />
+        <p><button type="submit">Load widget</button></p>
+      </form>
+
+      <p>The page then injects exactly the tag a customer would paste:</p>
+      <pre id="snippet"></pre>
+    </main>
+
+    <script>
+      // Reads ?key=…&api=… so you never have to edit this file. Reloads the page to (re)mount.
+      (function () {
+        var params = new URLSearchParams(location.search);
+        var key = params.get('key') || '';
+        var api = params.get('api') || 'http://localhost:8787';
+        document.getElementById('key').value = key;
+        document.getElementById('api').value = api;
+
+        document.getElementById('config').addEventListener('submit', function (e) {
+          e.preventDefault();
+          var next = new URLSearchParams({ key: document.getElementById('key').value.trim(), api: document.getElementById('api').value.trim() });
+          location.search = next.toString();
+        });
+
+        var status = document.getElementById('status');
+        var src = './dist/widget.js';
+        var snippet = '<script src="' + src + '" data-debugbuddy-key="' + (key || 'db_live_…') + '" data-api-url="' + api + '" defer><\/script>';
+        document.getElementById('snippet').textContent = snippet;
+
+        if (!key) {
+          status.textContent = 'Paste a key from the dashboard (Projects → your project → Create key) and click “Load widget”.';
+          return;
+        }
+
+        var s = document.createElement('script');
+        s.src = src;
+        s.defer = true;
+        s.setAttribute('data-debugbuddy-key', key);
+        s.setAttribute('data-api-url', api);
+        s.onload = function () { status.textContent = 'Widget loaded — open it with the button in the bottom-right corner.'; };
+        s.onerror = function () { status.textContent = 'Could not load ./dist/widget.js. Run “npm run build -w apps/widget” first.'; };
+        document.body.appendChild(s);
+      })();
+    </script>
+  </body>
+</html>

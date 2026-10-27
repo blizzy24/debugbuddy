@@ -1,0 +1,20 @@
+{
+  "name": "debugbuddy",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "npm run build -w packages/markdown -w apps/api -w apps/widget -w apps/dashboard",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "dev:api": "npm run dev -w apps/api",
+    "dev:widget": "npm run demo -w apps/widget",
+    "dev:dashboard": "npm run dev -w apps/dashboard",
+    "test:adf": "npm run test:adf -w packages/markdown"
+  }
+}
